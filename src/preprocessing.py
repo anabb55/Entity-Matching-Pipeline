@@ -19,6 +19,8 @@ replace_map = {
     "â??": "'",
     "Â?": "'",
     "â?¦": "...",
+    "ââ": " ",
+    "å": "a",
 
 }
 
@@ -52,6 +54,7 @@ def clean_authors(text: str) -> str:
     s = ftfy.fix_text(s)
     for bad, good in replace_map.items():
         s = s.replace(bad, good)
+    s = re.sub(r"[^\w\s,\-]", " ", s)
     s = unicodedata.normalize("NFKC", s)
     s = s.lower()
 
@@ -108,6 +111,118 @@ def extract_last_name(authors:str) -> set:
     return last_names
 
 
+def jaccard(set1, set2) -> float:
+    if not set1 and not set2:
+        return 0.0
+    
+    return len(set1 & set2) / len(set1 | set2)
+
+
+def deduplicate_sorted(df):
+    df = df.copy()
+    df = df.sort_values("title").reset_index(drop=True)
+
+    df["title_tokens"] = df["title"].apply(tokenize_title)
+    df["author_lastnames"] = df["authors"].apply(extract_last_name)
+
+    to_drop = set()
+    groups =[]
+
+    i = 0
+
+    while i < len(df) - 1:
+        j = i + 1
+
+        if j in to_drop:
+            i += 1
+            continue
+
+        tokens_i = df.loc[i, "title_tokens"]
+        tokens_j = df.loc[j, "title_tokens"]
+        authors_i = df.loc[i, "author_lastnames"]
+        authors_j = df.loc[j, "author_lastnames"]
+
+        if tokens_i and tokens_j:
+            sim = jaccard(tokens_i, tokens_j)
+        else:
+            sim = 0.0
+
+        if sim >= 0.8 and len(authors_i & authors_j) > 0:
+            to_drop.add(j)
+            groups.append([i, j])
+
+        i += 1
+
+    deduplicated = df.drop(index = list(to_drop)).reset_index(drop=True)
+    deduplicated = deduplicated.drop(columns = ["title_tokens", "author_lastnames"], errors= "ignore")
+
+    print("Input records:", len(df))
+    print("Duplicate groups:", len(groups))
+    print("Final unique records:", len(deduplicated))
+
+    return deduplicated
+
+   
+
+
+def is_numeric_heavy(tokens: set):
+    if not tokens:
+        return True
+
+    num_tokens = sum(t.isdigit() for t in tokens)
+    return num_tokens / len(tokens) >= 0.5
+   
+              
+def is_bad_title_shape(title: str):
+    if not isinstance(title, str):
+        return True
+
+    s = title.strip()
+    if not s:
+        return True
+
+    if len(s) < 5:
+        return True
+    
+    alpha_count = sum(ch.isalpha() for ch in s)
+    if alpha_count < 3:
+        return True
+
+    return False
+
+
+def is_weird_character(title: str):
+    if not isinstance(title, str):
+        return True
+
+    s = title.strip()
+    if not s:
+        return True
+
+    total = len(s)
+    non_ascii = sum(ord(ch) > 127 for ch in s) ## if ASCII code is above 127 -> weird characters
+    ratio = non_ascii / total
+
+    return ratio > 0.6
+
+
+def mark_noisy_rows(df):
+    df = df.copy()
+
+    df["title_tokens"] = df["title"].apply(tokenize_title)
+
+    df["is_noisy"] = (
+        df["title_tokens"].apply(is_numeric_heavy) | df["title"].apply(is_bad_title_shape) | df["title"].apply(is_weird_character))
+
+    df = df.drop(columns = ["title_tokens"])
+    return df
+
+
+def filter_noisy_rows(df):
+    df_marked = mark_noisy_rows(df)
+    clean_df = df_marked[df_marked["is_noisy"] == False].copy()
+    return clean_df.drop(columns = ["is_noisy"])
+
 
    
 cols_to_clean = ["title", "venue", "authors"]
@@ -115,12 +230,22 @@ cols_keep = ["id", "year"]
 
 scholar_clean = make_clean_df(scholar_data, cols_keep, cols_to_clean)
 DBLP_clean = make_clean_df(DBLP_data, cols_keep, cols_to_clean)
+
+scholar_clean = filter_noisy_rows(scholar_clean)
+DBLP_clean = filter_noisy_rows(DBLP_clean)
+
 scholar_clean.to_csv("data/Scholar_cleaned.csv", index=False)
 DBLP_clean.to_csv("data/DBLP_cleaned.csv", index=False)
 
+
+scholar_deduplicated= deduplicate_sorted(scholar_clean)
+scholar_deduplicated.to_csv("data/Scholar_deduplicated.csv", index=False)
+DBLP_deduplicated = deduplicate_sorted(DBLP_clean)
+DBLP_deduplicated.to_csv("data/DBLP_deduplicated.csv", index=False)
+
 ## test
-last_n = extract_last_name(scholar_clean.iloc[62]["authors"])
-print(last_n)
+# last_n = extract_last_name(scholar_clean.iloc[62]["authors"])
+# print(last_n)
 
 
 
