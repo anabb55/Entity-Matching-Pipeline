@@ -39,6 +39,7 @@ def separate_lastnames(df, id_col):
 
     return tmp[[id_col, "lastname"]]
 
+
 def first_content_token(title: str):
     if not isinstance(title, str):
         return ""
@@ -61,8 +62,8 @@ print("Title-based candidate pairs", len(title_pairs))
 
 
 
-core_pairs = author_pairs & title_pairs 
-candidate_pairs = core_pairs | title_pairs
+
+candidate_pairs = author_pairs | title_pairs
 candidate_pairs_count = len(candidate_pairs)
 print("Union:", candidate_pairs_count)
 

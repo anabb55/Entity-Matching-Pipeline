@@ -150,7 +150,7 @@ def deduplicate_sorted(df):
 
         same_all_authors = (authors_i == authors_j) and len(authors_i) > 0
 
-        if (sim >= 0.9 and len(authors_i & authors_j) > 0):
+        if (sim >= 0.8 and len(authors_i & authors_j) > 0):
             to_drop.add(j)
             groups.append([i, j])
 
