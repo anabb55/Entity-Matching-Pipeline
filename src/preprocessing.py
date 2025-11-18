@@ -147,7 +147,10 @@ def deduplicate_sorted(df):
         else:
             sim = 0.0
 
-        if sim >= 0.8 and len(authors_i & authors_j) > 0:
+
+        same_all_authors = (authors_i == authors_j) and len(authors_i) > 0
+
+        if (sim >= 0.9 and len(authors_i & authors_j) > 0):
             to_drop.add(j)
             groups.append([i, j])
 
@@ -203,7 +206,7 @@ def is_weird_character(title: str):
     non_ascii = sum(ord(ch) > 127 for ch in s) ## if ASCII code is above 127 -> weird characters
     ratio = non_ascii / total
 
-    return ratio > 0.6
+    return ratio > 0.8
 
 
 def mark_noisy_rows(df):
@@ -212,7 +215,7 @@ def mark_noisy_rows(df):
     df["title_tokens"] = df["title"].apply(tokenize_title)
 
     df["is_noisy"] = (
-        df["title_tokens"].apply(is_numeric_heavy) | df["title"].apply(is_bad_title_shape) | df["title"].apply(is_weird_character))
+         df["title"].apply(is_bad_title_shape) | df["title"].apply(is_weird_character))
 
     df = df.drop(columns = ["title_tokens"])
     return df
